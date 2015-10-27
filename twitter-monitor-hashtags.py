@@ -45,7 +45,7 @@ else:
 
 print 'Using Profile ' + sys.argv[1] + ' to monitor hashtags'
 
-outputFile = open(datetime.datetime.now().strftime('%Y-%m-%d')+'-tweets-instagram.dat', 'a', 0)
+outputFile = open(datetime.datetime.now().strftime('%Y-%m-%d')+'-tweets-hashtags.csv', 'a', 0)
 
 class listener(StreamListener):
 	def on_data(self, data):
