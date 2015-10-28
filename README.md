@@ -1,7 +1,7 @@
 # Data-Collecting
-Data crawlers and scripts to data collecting used during the PhD. Course
+Data crawlers and scripts to data collecting used during my PhD. Course
 
-Usually I need to collect data during in a data-wars style ;)
+Usually I need to collect data in a data-wars style ;)
 This script are a simple courtesy of weapons to this battle.
 
 Actually the project provides the following files:
