@@ -33,7 +33,7 @@ print colorama.Fore.WHITE + colorama.Back.RED + 'Weather Underground Data Crawle
 while True:
 	try:
 		dateRec = dateBegin.strftime('%Y%m%d')
-		if dateBegin.weekday() >= 6:
+		if dateBegin.weekday() >= 5:
 			colorDate = colorama.Fore.RED
 		else:
 			colorDate = colorama.Fore.YELLOW
