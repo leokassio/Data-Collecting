@@ -15,6 +15,7 @@ import urllib2
 import codecs
 import colorama as clm
 from bs4 import BeautifulSoup
+from tqdm import tqdm
 
 reload(sys)  
 sys.setdefaultencoding('utf8')
@@ -28,23 +29,28 @@ setUrls = set()
 dictPlaces = dict()
 seterror404 = set()
 
+fileplaces = open(cityName + '-all-places.csv')
+for line in fileplaces:
+	try:
+		url, url4sq, placename, category, score = line.replace('\n', '').split(',')
+		dictPlaces[url] = [url4sq, placename, category, score]
+	except IndexError:
+		print 'error', line
 try:
 	output_file = open(output_file_path, 'r')
 	for line in output_file:
 		try:
-			linesplited = line.split(',')
-			url4sq = linesplited[4]
-			dictPlaces[url4sq] = (linesplited[5],linesplited[6],linesplited[7],linesplited[8])
-			setUrls.add(linesplited[3])
+			linesplited = line.replace('\n', '').split(',')
+			url = linesplited[2]
+			if url not in dictPlaces:
+				dictPlaces[url] = (linesplited[3],linesplited[4],linesplited[5],linesplited[6])
+			setUrls.add(linesplited[1])
 		except IndexError:
-			# print line
-			# print clm.Back.RED+clm.Fore.WHITE, 'INDEX ERROR:',line, clm.Fore.RESET+clm.Back.RESET
-			continue
-	print clm.Fore.YELLOW, 'Initially '+str(len(dictPlaces.keys()))+' places and '+str(len(setUrls))+' checkins was already defined', clm.Fore.RESET
+			print 'error', line
+	print clm.Fore.YELLOW, 'Initially '+str(len(dictPlaces))+' places and '+str(len(setUrls))+' checkins was already defined', clm.Fore.RESET
 	output_file.close()
 except IOError:
-	pass
-	print 'INPUT FILE NOT FOUND'
+	print 'NO OUTPUT FILE'
 
 try:
 	output_error_404 = open(output_error_404_file_path, 'r')
@@ -52,10 +58,10 @@ try:
 		seterror404.add(line.replace('\n', ''))
 	output_error_404.close()
 except IOError:
-	pass
+	print 'NO ERROR FILE'
 
 input_file = open(input_file_path, 'r')
-output_file = open(output_file_path, 'a')
+output_file = open(output_file_path, 'a', 0)
 output_error_404 = open(output_error_404_file_path, 'a')
 
 input_file.seek(0) #restarting the cursor of file
@@ -68,36 +74,26 @@ except IndexError:
 	input_file.seek(0) #restarting the cursor of file
 	linefileindex = 0
 
-for line in input_file:
+for line in tqdm(input_file, desc='Defining URLs', total=numLines):
 	linefileindex += 1
-	lineindex = len(setUrls)
-	printFlag = lineindex %5 == 0
-	# line example - 555566193625792512,41.90987.677,262338018,https://t.co/tfz5klPqMQ
 	linesplited = line.replace('\n', '').split(',')
 	try:
 		id_data = linesplited[0].encode('utf-8')
-		placeid = linesplited[1].encode('utf-8')
-		userid = linesplited[2].encode('utf-8')
-		url = linesplited[3].encode('utf-8')
+		url = linesplited[1].encode('utf-8')
 		if 'http://' not in url and 'https://' not in url:
 			url = 'http://' + url
 	except IndexError:
 		continue
 
-	for attempt in range(1,4):
+	for attempt in range(4):
 		soup = False
 		try:
-			if url in setUrls:
-				if printFlag:
-					print clm.Fore.CYAN, url, clm.Fore.RESET, '['+str(lineindex)+'/'+str(numLines)+'/'+str(numLines - lineindex)+'] ' + clm.Back.YELLOW+clm.Fore.BLACK+'  USER MATCH  '+clm.Fore.RESET+clm.Back.RESET
-				break
-			elif url in seterror404:
-				if printFlag:
-					print clm.Back.WHITE+clm.Fore.RED, 'Error 404 Already Defined:', url, clm.Fore.RESET+clm.Back.RESET
+			if url in seterror404:
+				print clm.Back.WHITE+clm.Fore.RED, 'Error 404 or Already Defined:', url, clm.Fore.RESET+clm.Back.RESET
 				break
 			page = urllib2.urlopen(url, timeout=15).read()
 			soup = BeautifulSoup(page)
-			msg = id_data+','+placeid+','+userid+','+url
+			msg = id_data+','+url
 			break
 		except IOError, e:
 			if 'HTTP Error 404' in str(e) or 'Name or service not known' in str(e):
@@ -115,22 +111,17 @@ for line in input_file:
 		for urlFoursquare in soup.select('div > h1 > a[href^="https://foursquare.com/"]'):
 			url4sq = urlFoursquare.get('href').encode('utf-8')
 			msg += ','+url4sq
-			try: # test if that url of FOURSQUARE-PLACE was already fetched 
-				t = dictPlaces[url4sq]
-				try:
-					msg += ',' + t[0] + ',' + t[1] + ',' + t[2] + ',' + t[3] + '\n'
-				except TypeError:
-					print t
-					exit()
+			try:
+				urldefined, placename, category, score = dictPlaces[url4sq]
+				msg += ',' + category + ',' + placename + ',' + score + ','  + urldefined + '\n'
 				output_file.write(msg)
-				print clm.Fore.CYAN, url4sq, clm.Fore.RESET, str(linefileindex), '['+str(numLines),'|',str(linefileindex - lineindex),']', clm.Back.GREEN,clm.Fore.BLACK,' PLACE MATCH ',clm.Fore.RESET,clm.Back.RESET
+				print url4sq, clm.Back.GREEN,clm.Fore.BLACK,' PLACE MATCH ',clm.Fore.RESET,clm.Back.RESET
 				break
 			except KeyError:
 				pass
-
+				
 			try:
 				page2 = urllib2.urlopen(urlFoursquare.get('href'), timeout=30).read()
-				print clm.Fore.CYAN, url4sq, clm.Fore.RESET, str(linefileindex), '['+str(numLines), '|', str(linefileindex - lineindex),']', clm.Fore.RESET
 				soup2 = BeautifulSoup(page2)
 				sp = soup2.find_all('div', class_= 'categories')
 			except urllib2.HTTPError:
@@ -146,7 +137,7 @@ for line in input_file:
 			else:
 				category = ',NoClass'
 				msg += category
-				output_error_file.write(line.encode('utf-8')) # TODO ERROR HANDLE
+				# output_error_file.write(line.encode('utf-8')) # TODO ERROR HANDLE
 			sp = soup2.find_all('h1', class_= 'venueName')
 			if sp:
 				for name in sp:
@@ -180,7 +171,8 @@ for line in input_file:
 			if matchflag == False:
 				print clm.Fore.RED, 'X', clm.Fore.RESET
 			else:
-				dictPlaces[url4sq] = (category, name, score,link)
+				dictPlaces[url4sq] = [link, name, category, score]
+				# dictPlaces[url4sq] = (category, name, score,link)
 				setUrls.add(url)
 				# msg = msg.replace('\n','')
 				output_file.write(msg + '\n')
