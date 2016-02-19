@@ -13,17 +13,24 @@ import selenium
 import datetime
 from tqdm import tqdm
 from threading import Thread
+from Queue import Queue
 from selenium.webdriver import Firefox
 from selenium.webdriver import PhantomJS
 
 reload(sys)  
 sys.setdefaultencoding('utf8')
 
-bufferSize = 100
-threadBufferSize = 10
-driverBuffer = list()
+bufferSize = 10
+threadBufferSize = 16
 outputFilename = '-instagram-output.csv'
 input_file_path = '-instagram-checkin.csv'
+
+def createDriver():
+	try:
+		driver = PhantomJS()
+	except:
+		driver = PhantomJS('./phantomjs')
+	return driver 
 
 
 def resolveCheckin(driver, id_data, url):
@@ -45,22 +52,22 @@ def resolveCheckin(driver, id_data, url):
 	except AttributeError:
 		return id_data + ',' + url
 
-def resolveCheckinBatch(thread_id, driver, urlBuffer):
+def resolveCheckinBatch(thread_id, driver, urlBuffer, driverBuffer):
 	t0 = datetime.datetime.now()
-	# driver = driver = PhantomJS('./phantomjs')
-	results = list()
-	for id_data, url in urlBuffer:
-		r = resolveCheckin(driver, id_data, url)
-		results.append(r)
 	global outputFilename
-	global driverBuffer
-	driverBuffer.append(driver)
+	results = list()
+	try:
+		for id_data, url in urlBuffer:
+			r = resolveCheckin(driver, id_data, url)
+			results.append(r)
+	except:
+		print 'except here'
 	f = open(outputFilename, 'a')
 	for r in results:
 		f.write(r + '\n')
 	f.close()
+	driverBuffer.put(driver)
 	print 'Thread Finished', '#' + (thread_id), (datetime.datetime.now() - t0).total_seconds(), 'secs'
-	return results
 
 def loadDefinedPlaces(outputFilename):
 	setUrlDefined = set()
@@ -75,7 +82,6 @@ def loadDefinedPlaces(outputFilename):
 	return setUrlDefined
 
 def define_url():
-	global driverBuffer
 	global bufferSize
 	global threadBufferSize
 	global outputFilename
@@ -84,16 +90,18 @@ def define_url():
 	cityName = sys.argv[1]
 	outputFilename = cityName + outputFilename
 	input_file_path = cityName + input_file_path
+	driverBuffer = Queue()
 	
 	urlBuffer = list()
 	threadBuffer = list()
 
-	for i in range(threadBufferSize):
-		driver = PhantomJS('./phantomjs') # in case of PhantomJS not available, we can use Firefox
-		driverBuffer.append(driver)
 	setUrlDefined = loadDefinedPlaces(outputFilename)
-
 	print colorama.Back.RED+colorama.Fore.YELLOW+str(len(setUrlDefined))+' URLs already defined! Lets Rock more now...'+colorama.Back.RESET+colorama.Fore.RESET
+	
+	for i in range(threadBufferSize):
+		driver = createDriver() # in case of PhantomJS not available, we can use Firefox
+		driverBuffer.put(driver)
+
 
 	try:
 		input_file = open(input_file_path, 'r')						# file with url checkins  to be resolved
@@ -125,15 +133,22 @@ def define_url():
 		urlBuffer.append((id_data, url))
 		if len(urlBuffer) == bufferSize:
 			tid = str(len(threadBuffer)+1)
-			driver =driverBuffer.pop()
-			t = Thread(target=resolveCheckinBatch, args=[tid, driver, urlBuffer])
+			try: 
+				driver = driverBuffer.get() 
+			except IndexError: # in case of exception on thread execution
+				print 'criando nova'
+				driver = createDriver()
+
+			t = Thread(target=resolveCheckinBatch, args=[tid, driver, urlBuffer, driverBuffer])
 			t.start()
 			threadBuffer.append(t)
 			urlBuffer = list()
-		if len(threadBuffer) == threadBufferSize:
-			for t in threadBuffer:
-				t.join()
-			threadBuffer = list()
+			
+			if len(threadBuffer) >= threadBufferSize:
+				for t in threadBuffer:
+					t.join(10.0)
+				threadBuffer = list()
+
 	print colorama.Fore.GREEN, 'GG bro ;)', colorama.Fore.RESET
 
 def main():
