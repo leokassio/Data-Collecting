@@ -20,8 +20,8 @@ from selenium.webdriver import PhantomJS
 reload(sys)  
 sys.setdefaultencoding('utf8')
 
-bufferSize = 10
-threadBufferSize = 16
+threadBufferSize = 20
+urlBufferSize = 100
 outputFilename = '-instagram-output.csv'
 input_file_path = '-instagram-checkin.csv'
 
@@ -46,28 +46,32 @@ def resolveCheckin(driver, id_data, url):
 	except selenium.common.exceptions.NoSuchElementException:
 		try:
 			error = driver.find_element_by_class_name('error-container')
-			return id_data + ',' + url
+			return None # id_data + ',' + url + ',' + 'not-available'
 		except selenium.common.exceptions.NoSuchElementException:
-			return id_data + ',' + url
+			pass
 	except AttributeError:
-		return id_data + ',' + url
+		pass
+	except: # get the error on trace printed
+		pass
+	return None # id_data + ',' + url
 
-def resolveCheckinBatch(thread_id, driver, urlBuffer, driverBuffer):
-	t0 = datetime.datetime.now()
-	global outputFilename
-	results = list()
-	try:
-		for id_data, url in urlBuffer:
-			r = resolveCheckin(driver, id_data, url)
-			results.append(r)
-	except:
-		print 'except here'
-	f = open(outputFilename, 'a')
-	for r in results:
-		f.write(r + '\n')
-	f.close()
-	driverBuffer.put(driver)
-	print 'Thread Finished', '#' + (thread_id), (datetime.datetime.now() - t0).total_seconds(), 'secs'
+def resolveCheckinRun(driver, urlBuffer, saveBuffer):
+	while True:
+		item = urlBuffer.get()
+		id_data, url = item
+		line = resolveCheckin(driver, id_data, url)
+		if line != None:
+			saveBuffer.put_nowait(line)
+		urlBuffer.task_done()
+
+def saveCheckinRun(outputFilename, saveBuffer):
+		f = open(outputFilename, 'a', 0)
+		while True:
+			r = saveBuffer.get()
+			f.write(r + '\n')
+			saveBuffer.task_done()
+		f.close()
+
 
 def loadDefinedPlaces(outputFilename):
 	setUrlDefined = set()
@@ -90,18 +94,21 @@ def define_url():
 	cityName = sys.argv[1]
 	outputFilename = cityName + outputFilename
 	input_file_path = cityName + input_file_path
-	driverBuffer = Queue()
 	
-	urlBuffer = list()
-	threadBuffer = list()
+	urlBuffer = Queue(maxsize=urlBufferSize) 	
+	saveBuffer = Queue()
 
 	setUrlDefined = loadDefinedPlaces(outputFilename)
 	print colorama.Back.RED+colorama.Fore.YELLOW+str(len(setUrlDefined))+' URLs already defined! Lets Rock more now...'+colorama.Back.RESET+colorama.Fore.RESET
 	
+	t = Thread(target=saveCheckinRun, args=[outputFilename, saveBuffer])
+	t.daemon = True
+	t.start()
 	for i in range(threadBufferSize):
-		driver = createDriver() # in case of PhantomJS not available, we can use Firefox
-		driverBuffer.put(driver)
-
+		driver = createDriver() # in case of PhantomJS not available, we can use Firefox()
+		t = Thread(target=resolveCheckinRun, args=[driver, urlBuffer, saveBuffer])
+		t.daemon = True
+		t.start()
 
 	try:
 		input_file = open(input_file_path, 'r')						# file with url checkins  to be resolved
@@ -110,12 +117,6 @@ def define_url():
 
 	numLines = sum(1 for line in input_file)		# counting lines on file
 	input_file.seek(0) 								# restarting the cursor of file
-
-	try:
-		lineinit = sys.argv[2]						# in cases of bug, return from this line
-		input_file.seek(int(lineinit))
-	except IndexError:
-		input_file.seek(0) 							# restarting the cursor of file
 
 	for line in tqdm(input_file, desc='Defining URLs ' + cityName, total=numLines, leave=True):
 		linesplited = line.replace('\n', '').split(',')
@@ -130,25 +131,9 @@ def define_url():
 		if id_data in setUrlDefined:
 			continue
 
-		urlBuffer.append((id_data, url))
-		if len(urlBuffer) == bufferSize:
-			tid = str(len(threadBuffer)+1)
-			try: 
-				driver = driverBuffer.get() 
-			except IndexError: # in case of exception on thread execution
-				print 'criando nova'
-				driver = createDriver()
+		urlBuffer.put((id_data, url))
 
-			t = Thread(target=resolveCheckinBatch, args=[tid, driver, urlBuffer, driverBuffer])
-			t.start()
-			threadBuffer.append(t)
-			urlBuffer = list()
-			
-			if len(threadBuffer) >= threadBufferSize:
-				for t in threadBuffer:
-					t.join(10.0)
-				threadBuffer = list()
-
+	urlBuffer.join()
 	print colorama.Fore.GREEN, 'GG bro ;)', colorama.Fore.RESET
 
 def main():
