@@ -8,6 +8,7 @@
 # ============================================================================================
 
 import sys
+import httplib
 import colorama 
 import selenium
 import datetime
@@ -27,9 +28,9 @@ input_file_path = '-instagram-checkin.csv'
 
 def createDriver():
 	try:
-		driver = PhantomJS()
-	except:
 		driver = PhantomJS('./phantomjs')
+	except:
+		driver = PhantomJS()
 	return driver 
 
 
@@ -46,14 +47,14 @@ def resolveCheckin(driver, id_data, url):
 	except selenium.common.exceptions.NoSuchElementException:
 		try:
 			error = driver.find_element_by_class_name('error-container')
-			return None # id_data + ',' + url + ',' + 'not-available'
+			return id_data + ',' + url + ',' + 'not-available'
 		except selenium.common.exceptions.NoSuchElementException:
 			pass
 	except AttributeError:
 		pass
-	except: # get the error on trace printed
+	except httplib.BadStatusLine:
 		pass
-	return None # id_data + ',' + url
+	return None # id_data + ',' + url + ',' + 'None'
 
 def resolveCheckinRun(driver, urlBuffer, saveBuffer):
 	while True:
