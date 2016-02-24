@@ -27,19 +27,20 @@ def main():
 	url = 'http://www.hltv.org'
 	minutes = 2
 	driver = createDriver()
-	timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:00')
 	while True:
+		timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:00')
 		driver.get(url)
 		elements = driver.find_elements_by_id('secondCollumn')
 		for e in elements:
 			for i, t in enumerate(e.find_elements_by_id('boc1')):
 				if i != 1: continue
 				stream = [a.get_attribute('title') for a in t.find_elements_by_tag_name('a')]
+				href = [a.get_attribute('href') for a in t.find_elements_by_tag_name('a')]
 				viewers = [v.text for v in t.find_elements_by_tag_name('div')[4:-1:2]]
-				for s, v in zip(stream, viewers):
+				for s, v, h in zip(stream, viewers, href):
 					v = v.replace('(', '').replace(')', '')
-					print colorama.Fore.CYAN+timestamp, s, v, colorama.Fore.RESET	
-					fileout.write(timestamp + ',' + s + ',' + v + '\n')
+					print colorama.Fore.CYAN+timestamp, s, v, h, colorama.Fore.RESET	
+					fileout.write(timestamp + ',' + s + ',' + v + ',' + h + '\n')
 		print colorama.Fore.YELLOW + 'Waiting', minutes, 'minutes' + colorama.Fore.RESET	
 		try:
 			time.sleep(60 * minutes)
