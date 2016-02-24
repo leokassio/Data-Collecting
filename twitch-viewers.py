@@ -17,7 +17,17 @@ filename = args[1]
 fileout = open(filename + '.data', 'a', 0)
 
 # TODO: tranfers the list of channel to an external configuration file.
-twitch_channels = ['ESL_Bida', 'esl_csgo', 'esl_csgo_pl', 'stormstudio_csgo_ru', 'ESL_YTGlitchGamer', 'esl_esmaroc', 'esl_csgoitalia', 'esl_gplaytv', 'esl_clanmystik', 'esl_csgo_es']
+twitch_channels = list() 
+twitch_channels.append('ESL_Bida')
+twitch_channels.append('esl_csgo')
+twitch_channels.append('esl_csgo_pl')
+twitch_channels.append('stormstudio_csgo_ru')
+twitch_channels.append('ESL_YTGlitchGamer')
+twitch_channels.append('esl_esmaroc')
+twitch_channels.append('esl_csgoitalia')
+twitch_channels.append('esl_gplaytv')
+twitch_channels.append('esl_clanmystik')
+twitch_channels.append('esl_csgo_es')
 
 while True:
 	for ch in twitch_channels:
