@@ -3,7 +3,7 @@
 # GNU Public License
 # Dev: Kassio Machado - Brazil
 # Created on 2015-02-24 - Ottawa/Canada
-# Script to web scrap and collect the ammount of live viewers on a list o Twitch channels
+# Script to web scrap and collect the ammount of live viewers on a list o Stream channels
 # ============================================================================================
 
 
@@ -37,10 +37,14 @@ def main():
 				stream = [a.get_attribute('title') for a in t.find_elements_by_tag_name('a')]
 				href = [a.get_attribute('href') for a in t.find_elements_by_tag_name('a')]
 				viewers = [v.text for v in t.find_elements_by_tag_name('div')[4:-1:2]]
-				for s, v, h in zip(stream, viewers, href):
+				kind = [img.get_attribute('src') for img in t.find_elements_by_tag_name('img')[1::2]]
+				country = [img.get_attribute('src') for img in t.find_elements_by_tag_name('img')[2::2]]
+				for s, v, h, k, c in zip(stream, viewers, href, kind, country):
 					v = v.replace('(', '').replace(')', '')
-					print colorama.Fore.CYAN+timestamp, s, v, h, colorama.Fore.RESET	
-					fileout.write(timestamp + ',' + s + ',' + v + ',' + h + '\n')
+					k = k.replace('http://static.hltv.org//images/', '')
+					c = c.replace('http://static.hltv.org//images/', '')
+					print colorama.Fore.CYAN+timestamp, s, v, h, k, c, colorama.Fore.RESET	
+					fileout.write(timestamp + ',' + s + ',' + v + ',' + h + ',' + k + ',' + c + '\n')
 		print colorama.Fore.YELLOW + 'Waiting', minutes, 'minutes' + colorama.Fore.RESET	
 		try:
 			time.sleep(60 * minutes)
@@ -48,11 +52,10 @@ def main():
 			fileout.close()
 			
 
-
-
-
-
-
-
 if __name__ == "__main__":
 	main()
+
+
+
+
+
