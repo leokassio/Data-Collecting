@@ -7,6 +7,7 @@
 
 import time
 import json
+import socket
 import urllib2 
 import colorama
 import datetime
@@ -60,13 +61,16 @@ def dataCollection():
 			data = dict()
 			for i in range(3):
 				try:
-					req = urllib2.urlopen(url)
+					req = urllib2.urlopen(url, timeout=10)
 					rawdata = req.read()
 					data = json.loads(rawdata)
 					if len(data.keys()) > 0:
 						break
-				except urllib2.HTTPError:
-					print url
+				except urllib2.HTTPError as e:
+					print url, 'HTTP Error', e
+					time.sleep(i)
+				except socket.timeout as e:
+					print url, 'Timeout', e
 					time.sleep(i)
 			try:
 				username = unicode(data['username'])
