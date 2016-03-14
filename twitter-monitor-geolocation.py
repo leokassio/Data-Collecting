@@ -16,49 +16,62 @@ from tweepy import OAuthHandler
 from tweepy.streaming import StreamListener
 from ConfigParser import SafeConfigParser
 
-boundingBoxNames = ['New_York', 'Chicago', 'Los_Angeles', 'Belo_Horizonte', 'Sao_Paulo', 'Rio', 'Istanbul', 'Paris', 'London']
-boundingBoxes = [[-74.25909,40.491369,-73.700272,40.915256], #new_york
-[-87.940267,41.644335,-87.524044,42.023131], #chicago 
-[-118.668176,33.703692,-118.155289,34.337306], #los angeles 
-[-44.063313,-20.029118,-43.864787,-19.776315], #belo hoizonte 
-[-46.825514,-24.008221,-46.365084,-23.356604], #sao paulo 
-[-43.79506,-23.076347,-43.101836,-22.746199], #rio de janeiro
-[28.595554,40.811404,29.428805,41.199239], #istanbul
-[2.224199,48.815573,2.469921,48.902145], #paris
-[-0.351468,51.38494,0.148271,51.672343]] #london
+outputFile = None
 
 def loadAppOAuth(configparser):
-	ckey = configparser.get('twitter_oauth', 'ckey') 
-	csecret = configparser.get('twitter_oauth', 'csecret')
-	yield ckey
-	yield csecret
+	configSection = 'twitter_oauth'
+	ckey = configparser.get(configSection, 'ckey') 
+	csecret = configparser.get(configSection, 'csecret')
+	return ckey, csecret
 
 def loadUserOAuth(configparser, profile):
-	atoken = configparser.get('twitter_oauth', 'atoken'+profile) 	# loading the file with section and the propertie name
-	asecret = configparser.get('twitter_oauth', 'asecret'+profile)
-	yield atoken
-	yield asecret
+	configSection = 'twitter_oauth'
+	atoken = configparser.get(configSection, 'atoken'+profile) 	# loading the file with section and the propertie name
+	asecret = configparser.get(configSection, 'asecret'+profile)
+	return atoken, asecret
 
+def loadBoundBox(configparser, locationName):
+	configSection = 'cities_bbox'
+	locationLabel = configparser.get(configSection, locationName+'_label')
+	print colorama.Fore.YELLOW + 'Loading', colorama.Fore.RED + locationLabel, colorama.Fore.YELLOW + 'coordinates...' + colorama.Fore.RESET
+	lng0 = configparser.getfloat(configSection, locationName+'_lng0')
+	lngn = configparser.getfloat(configSection, locationName+'_lngn')
+	lat0 = configparser.getfloat(configSection, locationName+'_lat0')
+	latn = configparser.getfloat(configSection, locationName+'_latn')
+	coordinates = [lng0, lat0, lngn, latn]
+	print colorama.Fore.RED + locationLabel , colorama.Fore.YELLOW + 'Bounding Box', coordinates, colorama.Fore.GREEN + '[OK]' + colorama.Fore.RESET
+	return locationLabel, coordinates
 
-def getBoundBox(index):
-	index = int(index)
-	yield boundingBoxes[index]
-	yield boundingBoxNames[index]
+def main():
+	if len(sys.argv) == 3:
+		configparser = SafeConfigParser()										# initalizing the parser
+		configparser.read('twitter-monitor.cfg')								# loading config file
+		ckey, csecret = loadAppOAuth(configparser)
+		atoken, asecret = loadUserOAuth(configparser, sys.argv[1])
+		locationLabel, cooordinates = loadBoundBox(configparser, sys.argv[2])
+	else:
+		print 'PLEASE INFORM THE INPUT DATA'
+		print 'python twitter-monitor-geolocation.py auth-index(int) location-name (string)'
+		exit()
 
-if len(sys.argv) == 3:
-	configparser = SafeConfigParser()										# initalizing the parser
-	configparser.read('twitter-monitor.cfg')								# loading config file
-	ckey, csecret = loadAppOAuth(configparser)
-	atoken, asecret = loadUserOAuth(configparser, sys.argv[1])
-	cooordinates, city = getBoundBox(sys.argv[2])
-	print city
-else:
-	print 'PLEASE INFORM THE INPUT DATA'
-	exit()
+	global outputFile
+	outputFile = open(datetime.datetime.now().strftime('%Y-%m-%d')+'-tweets-geolocation-' + locationLabel.lower() + '.csv', 'a', 0)
 
-outputFile = open(datetime.datetime.now().strftime('%Y-%m-%d')+'-tweets-geolocation-' + city + '.csv', 'a', 0)
+	auth = OAuthHandler(ckey, csecret)
+	auth.set_access_token(atoken, asecret)
+	twitterStream = Stream(auth, listener())
+	while True:
+		try:
+			twitterStream.filter(locations=cooordinates)
+		except Exception as e:
+			print 'init error', sys.exc_info()
+		finally:
+			time.sleep(5)
 
 class listener(StreamListener):
+	geolocated_filter_method = 0
+	def __init__(self):
+		geolocated_filter_method = 1
 	def on_data(self, data):
 		try:
 			parsed_json = json.loads(data)
@@ -97,10 +110,10 @@ class listener(StreamListener):
 				print colorama.Fore.RED, parsed_json.keys(), colorama.Fore.RESET
 			else:
 				print colorama.Fore.RED, '[INFO] Stream limit message:', parsed_json['limit']['track'], colorama.Fore.RESET
-		except Exception as e:
-			exc_type, exc_obj, exc_tb = sys.exc_info()
-			fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-			print(exc_type, fname, exc_tb.tb_lineno)
+		# except Exception as e:
+		# 	exc_type, exc_obj, exc_tb = sys.exc_info()
+		# 	fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+		# 	print(exc_type, fname, exc_tb.tb_lineno)
 
 	def on_error(self, status):
 		print '==============================\nSTREAM ERROR\n=============================='
@@ -111,13 +124,6 @@ class listener(StreamListener):
 		print '==============================\nSTREAM TIMEOUT\n=============================='
 		return True
 
-auth = OAuthHandler(ckey, csecret)
-auth.set_access_token(atoken, asecret)
-twitterStream = Stream(auth, listener())
-while True:
-	try:
-		twitterStream.filter(locations=cooordinates)
-	except Exception as e:
-		print 'init error', sys.exc_info()
-	finally:
-		time.sleep(5)
+
+if __name__ == "__main__":
+	main()
