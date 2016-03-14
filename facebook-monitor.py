@@ -39,6 +39,7 @@ def loadConfiguration(facebookConfigFilename='facebook-monitor.cfg'):
 
 
 def dataCollection():
+	dictValues = dict()
 	configFile = loadConfiguration()
 	
 	pattern = configFile['page_info_pattern']
@@ -52,6 +53,9 @@ def dataCollection():
 
 	fileout = open(fileout, 'a', 0)
 	dt = datetime.datetime.now()
+
+	for p in pages:
+		dictValues[p] = dict(likes=-1, talking=-1)
 
 	while dt <= deadline:
 		dt = datetime.datetime.now()
@@ -80,12 +84,34 @@ def dataCollection():
 				checkins = unicode(data['checkins'])
 				line = timestamp + ',' + p + ',' + username + ',' + idPage + ',' + likes + ',' + talking + ',' + checkins
 				fileout.write(line + '\n')
-				print line
+				
+				likes = int(likes)
+				if dictValues[p]['likes'] == -1:
+					dictValues[p]['likes'] = likes
+				elif dictValues[p]['likes'] != likes:
+					diff = likes - dictValues[p]['likes']
+					if diff > 0:
+						print colorama.Fore.GREEN + p + ' Likes:', diff
+					elif diff < 0:
+						print colorama.Fore.RED + p + ' Likes:', diff
+				
+				talking = int(talking)
+				if dictValues[p]['talking'] == -1:
+					dictValues[p]['talking'] = talking
+				elif dictValues[p]['talking'] != talking:
+					diff = talking - dictValues[p]['talking']
+					if diff > 0:
+						print colorama.Fore.GREEN + p + ' Talking:', diff
+					elif diff < 0:
+						print colorama.Fore.RED + p + ' Talking:', diff
+				print colorama.Fore.YELLOW + line + colorama.Fore.RESET
+				dictValues[p]['likes'] = int(likes)
+				dictValues[p]['talking'] = int(talking)
 			except KeyError:
 				print data
 			time.sleep(1)
-		for i in tqdm(range(interval * 6), desc='Waiting ' + str(interval) + 'mins'):
-			time.sleep(10)
+		for i in tqdm(range(interval * 60), desc='Waiting ' + str(interval) + 'mins'):
+			time.sleep(1)
 
 
 if __name__ == "__main__":
