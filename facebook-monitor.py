@@ -12,7 +12,7 @@ import urllib2
 import colorama
 import datetime
 from tqdm import tqdm
-
+from prettytable import PrettyTable
 from ConfigParser import RawConfigParser
 
 infoPrefix = '[INFO] '
@@ -55,12 +55,13 @@ def dataCollection():
 	dt = datetime.datetime.now()
 
 	for p in pages:
-		dictValues[p] = dict(likes=-1, talking=-1)
+		dictValues[p] = dict(likes=0, talking=0)
 
 	while dt <= deadline:
 		dt = datetime.datetime.now()
 		timestamp = dt.strftime('%Y-%m-%d %H:%M:%S')
-		for p in pages:
+		pttb = PrettyTable(['Time', 'Username', 'Likes', 'New Likes', 'Talking', 'New Talking'])
+		for p in tqdm(pages, desc='Crawling Facebook pages'):
 			url = pattern.replace(kwtoken, token).replace(kwurl, p)
 			data = dict()
 			for i in range(3):
@@ -86,30 +87,33 @@ def dataCollection():
 				fileout.write(line + '\n')
 				
 				likes = int(likes)
-				if dictValues[p]['likes'] == -1:
-					dictValues[p]['likes'] = likes
-				elif dictValues[p]['likes'] != likes:
-					diff = likes - dictValues[p]['likes']
-					if diff > 0:
-						print colorama.Fore.GREEN + p + ' Likes:', diff
-					elif diff < 0:
-						print colorama.Fore.RED + p + ' Likes:', diff
-				
 				talking = int(talking)
-				if dictValues[p]['talking'] == -1:
-					dictValues[p]['talking'] = talking
-				elif dictValues[p]['talking'] != talking:
-					diff = talking - dictValues[p]['talking']
-					if diff > 0:
-						print colorama.Fore.GREEN + p + ' Talking:', diff
-					elif diff < 0:
-						print colorama.Fore.RED + p + ' Talking:', diff
-				print colorama.Fore.YELLOW + line + colorama.Fore.RESET
-				dictValues[p]['likes'] = int(likes)
-				dictValues[p]['talking'] = int(talking)
+				difflikes = '0'
+				difftalk = '0'
+				
+				diff = likes - dictValues[p]['likes']
+				if diff > 0:
+					difflikes = colorama.Fore.GREEN + '+' + str(diff) + colorama.Fore.RESET
+				elif diff < 0:
+					difflikes = colorama.Fore.RED + str(diff) + colorama.Fore.RESET
+				
+				diff = talking - dictValues[p]['talking']
+				if diff > 0:
+					difftalk = colorama.Fore.GREEN + '+' + str(diff) + colorama.Fore.RESET
+				elif diff < 0:
+					difftalk = colorama.Fore.RED + str(diff) + colorama.Fore.RESET
+
+				dictValues[p]['likes'] = likes
+				dictValues[p]['talking'] = talking
+
+				pttb_data = [timestamp, username, likes, difflikes, talking, difftalk]
+				pttb.add_row(pttb_data)
 			except KeyError:
 				print data
 			time.sleep(1)
+		
+		print pttb
+		
 		for i in tqdm(range(interval * 60), desc='Waiting ' + str(interval) + 'mins'):
 			time.sleep(1)
 
