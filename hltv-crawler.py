@@ -9,13 +9,14 @@
 
 import sys
 import time
+import lxml
 import httplib
 import urllib2
 import colorama
 import datetime
-from lxml import html
 from tqdm import tqdm
-from lxml.etree import XMLSyntaxError
+from lxml import html
+from lxml import etree
 from HTMLParser import HTMLParser
 from prettytable import PrettyTable
 
@@ -31,8 +32,11 @@ def main():
 	'Connection': 'keep-alive'}
 
 	while True:
-		timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-		pttb = PrettyTable(['Time', 'Stream', 'Viewers', 'Country', 'Class'])
+		dt = datetime.datetime.now()
+		timestamp = dt.strftime('%Y-%m-%d %H:%M:%S')
+		collumnLabel = dt.strftime('%d/%m %H:%M')
+		print '[INFO] Last timestamp check:', timestamp
+		pttb = PrettyTable([collumnLabel, 'Viewers', 'Country', 'Class'])
 		try:
 			req = urllib2.Request(url, headers=hdr)
 			page = urllib2.urlopen(req)
@@ -48,12 +52,12 @@ def main():
 				country = country.replace('.gif', '').upper()
 				line = timestamp + ',' + stream + ',' + str(viewers) + ',' + country + ',' + kind + ',' + streamid
 				fileout.write(line + '\n')
-				pttb_data = [timestamp, stream, viewers, country, kind]
+				pttb_data = [stream, viewers, country, kind.replace('Counter-Strike', 'CS').replace('-Global-Offensive', 'GO')]
 				pttb.add_row(pttb_data)
 			print pttb
 			for i in tqdm(range(minutes * 60), desc='waiting ' + str(minutes) + 'mins'):
 				time.sleep(1)
-		except lxml.etree.XMLSyntaxError:
+		except etree.XMLSyntaxError:
 			print pttb
 			print 'lxml.etree.XMLSyntaxError, waiting 1 minute....'
 			time.sleep(60)

@@ -60,7 +60,9 @@ def dataCollection():
 	while dt <= deadline:
 		dt = datetime.datetime.now()
 		timestamp = dt.strftime('%Y-%m-%d %H:%M:%S')
-		pttb = PrettyTable(['Time', 'Username', 'Likes', 'New Likes', 'Talking', 'New Talking'])
+		collumnLabel = dt.strftime('%d/%m/%Y %H:%M')
+		print '[INFO] Last timestamp check:', timestamp
+		pttb = PrettyTable([collumnLabel, 'Likes', 'New Likes', 'Talking', 'New Talking'])
 		for p in tqdm(pages, desc='Crawling Facebook pages'):
 			url = pattern.replace(kwtoken, token).replace(kwurl, p)
 			data = dict()
@@ -106,7 +108,7 @@ def dataCollection():
 				dictValues[p]['likes'] = likes
 				dictValues[p]['talking'] = talking
 
-				pttb_data = [timestamp, username, likes, difflikes, talking, difftalk]
+				pttb_data = [username, likes, difflikes, talking, difftalk]
 				pttb.add_row(pttb_data)
 			except KeyError:
 				print data
