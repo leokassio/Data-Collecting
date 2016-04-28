@@ -79,6 +79,10 @@ def dataCollection():
 				except socket.timeout as e:
 					print url, 'Timeout', e
 					time.sleep(i)
+				except Exception as e:
+					print 'Exception Generic'
+					print url, e
+					time.sleep(i)
 			try:
 				username = unicode(data['username'])
 				idPage = unicode(data['id'])
