@@ -23,9 +23,6 @@ from selenium.webdriver import PhantomJS
 reload(sys)  
 sys.setdefaultencoding('utf8')
 
-threadBufferSize = 10
-urlBufferSize = 100
-
 def createDriver():
 	try:
 		driver = PhantomJS('./phantomjs')
@@ -97,10 +94,15 @@ def loadDefinedPlaces(outputFilename):
 	return setUrlDefined
 
 def define_url():
-	global bufferSize
-	global threadBufferSize
-
-	input_file_path = sys.argv[1]
+	urlBufferSize = 1000
+	args = sys.argv[1:]
+	input_file_path = args[0]
+	try:
+		threadBufferSize = int(args[1])
+	except:
+		print colorama.Fore.RED, 'Default Thread Pool Size: 10', colorama.Fore.RESET
+		threadBufferSize = 10
+	
 	outputFilename = 'output/' + input_file_path.replace('.csv', '-output.csv')
 	
 	setUrlDefined = loadDefinedPlaces(outputFilename)
