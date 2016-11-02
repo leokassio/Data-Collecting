@@ -14,6 +14,7 @@ import tweepy
 import csv
 import time
 import colorama
+import setproctitle
 from tqdm import tqdm
 from Queue import Queue
 from threading import Thread
@@ -26,7 +27,7 @@ def loadDefinedUsers(outputDir, outputFile):
 		for line in outputDefinedUsers:
 			line = line.replace('\n','')
 			try:
-				setDefinedUsers.add(line)
+				setDefinedUsers.add(line.split(',')[0])
 			except:
 				continue
 		print len(setDefinedUsers), 'users already collected!'
@@ -41,16 +42,21 @@ def twitterCrawlerRun(idCrawler, usersBuffer, usersSaveBuffer):
 	logfile = open('logs/thread-crawler' + idCrawlerStr + '.log', 'a', 0)
 	apiTwitter = twitterAuth(idCrawler)
 	while True:
-		userid = usersBuffer.get()
-		if userid == 'kill':
+		try:
+			userid = usersBuffer.get()
+			if userid == 'kill':
+				usersBuffer.task_done()
+				break
+			r = getUserTimeline(apiTwitter, userid, usersSaveBuffer, idCrawler, logfile)
 			usersBuffer.task_done()
-			break
-		r = getUserTimeline(apiTwitter, userid, usersSaveBuffer, idCrawler, logfile)
-		usersBuffer.task_done()
-		msg = colorama.Fore.YELLOW + r['screen_name'] + ': ' + r['total_tweets'] + ' tweets w/ '
-		msg += r['valid_tweets'] + ' geocoords (' + r['calls'] + ' calls)' + colorama.Fore.RESET
-		print msg
-		# time.sleep(3)
+			msg = colorama.Fore.YELLOW + r['screen_name'] + ': ' + r['total_tweets'] + ' tweets w/ '
+			msg += r['valid_tweets'] + ' geocoords (' + r['calls'] + ' calls)' + colorama.Fore.RESET
+			print msg
+			# time.sleep(3)
+		except Exception, e:
+			logfile.write('Thread #' + idCrawlerStr + ': ' + str(e) + ' - ' + datetime.now().strftime('%m-%d %H:%M:%S') + '\n')
+			time.sleep(1)
+	logfile.write('Thread #' + idCrawlerStr + ': finishing on ' + userid + ' ' + datetime.now().strftime('%m-%d %H:%M:%S') + '\n')
 	logfile.close()
 	print 'Finishing', '#' + str(idCrawler), 'thread crawler'
 
@@ -62,6 +68,7 @@ def getUserTimeline(apiTwitter, userid, usersSaveBuffer, idCrawler, logfile):
 	timeout = 0
 	attempt = 0
 	timeline = list()
+	setTimeline = set() # used to define the most recent tweet visited
 	while True:
 		calls += 1
 		try:
@@ -75,8 +82,11 @@ def getUserTimeline(apiTwitter, userid, usersSaveBuffer, idCrawler, logfile):
 		except tweepy.error.TweepError as e:
 			exceptMsg = str(e)
 			logfile.write(datetime.now().strftime('%m-%d %H:%M:%S') + ' error on load ' + exceptMsg + ' attempt ' + str(attempt) + '\n')
-			if 'Not authorized.' in exceptMsg or attempt >= 3 or timeout >= 3:
-				usersSaveBuffer.put('fatal-error:' + userid)
+			if 'Not authorized.' in exceptMsg:
+				usersSaveBuffer.put([userid, 'not-authorized'])	# user changed its privacy settings (not public anymore)
+				break
+			elif attempt >= 3 or timeout >= 3:
+				usersSaveBuffer.put([userid, '3-attempts']) 	# maybe can be tried again later
 				break
 			elif 'Read timed out' in exceptMsg:
 				timeout += 1
@@ -99,8 +109,8 @@ def getUserTimeline(apiTwitter, userid, usersSaveBuffer, idCrawler, logfile):
 					time.sleep(sleeptime)
 					continue
 				elif e.message[0]['code'] == 34:
-					usersSaveBuffer.put('fatal-error:' + userid)
-					break # user does not exist anymore
+					usersSaveBuffer.put([userid, 'error404']) # user does not exist anymore
+					break
 				elif e.message[0]['code'] == 89:
 					print colorama.Fore.RED + 'Thread #' + str(idCrawler) + ' TweepError 89: Invalid or expired token!'
 					exit()
@@ -118,6 +128,7 @@ def getUserTimeline(apiTwitter, userid, usersSaveBuffer, idCrawler, logfile):
 			msg += '\n------------------------------------------------------------------------' + colorama.Fore.RESET
 			print msg
 			time.sleep(1)
+			logfile.write('Thread #' + str(idCrawler) + ': ' + str(e) + ' - ' + datetime.now().strftime('%m-%d %H:%M:%S') + '\n')
 			break
 
 		if len(timeline) == 0:
@@ -134,7 +145,7 @@ def getUserTimeline(apiTwitter, userid, usersSaveBuffer, idCrawler, logfile):
 				tweetText = status.text.replace('\n', '')
 				app = status.source.lower()
 				appURL = status.source_url.lower()
-				timestamp = status.created_at
+				timestamp = status.	
 				weekday = timestamp.weekday()
 				activeCollection = True
 				lng, lat = status.coordinates['coordinates']
@@ -145,6 +156,7 @@ def getUserTimeline(apiTwitter, userid, usersSaveBuffer, idCrawler, logfile):
 						del urls[ui]['indices']
 					except KeyError:
 						continue
+				hashtags = [hashtags[hi]['text'] for hi in range(len(hashtags))]
 				try:
 					country = status.place.country
 					country_code = status.place.country_code
@@ -162,20 +174,26 @@ def getUserTimeline(apiTwitter, userid, usersSaveBuffer, idCrawler, logfile):
 					userid=userid_status, dataset_curator=2, text=tweetText, app=app, app_url=appURL, lang=lang,
 					hashtags=hashtags, urls=urls, weekday=weekday, screen_name=screenName, active_collect=True,
 					country=country_code, place_name=place_name, place_url=place_url, place_type=place_type)
+				setTimeline.add((timestamp,id_data))
 				usersSaveBuffer.put(document)
 			else:
 				noCoords += 1
 		# time.sleep(2)
+	
 	try:
 		screenName = colorama.Fore.GREEN + '@' + screenName + colorama.Fore.RESET
 	except:
 		screenName = userid
 	docReturn = dict(screen_name=screenName, total_tweets=str(total), valid_tweets=str(total - noCoords), calls=str(calls))
+	dt = sorted(setTimeline)[0]
+	usersSaveBuffer.put([userid, 'ok@' + dt[0].strftime('%y-%m-%d %H:%M:%S') + '@' + dt[1]]) # user completely visited
 	return docReturn
 
 def twitterCrawlerSaveRun(usersSaveBuffer, outputDir, outputFile):
-	print 'Starting save thread'
+	print colorama.Fore.RED + 'Starting save thread' + colorama.Fore.RESET
 	setDefinedUsers = set()
+	
+	logfile = open('logs/thread-save.log', 'a', 0)
 	outputGeneral = open(outputDir + outputFile + '-general.csv', 'a')
 	outputInstagram = open(outputDir + outputFile + '-instagram.csv', 'a')
 	outputFoursquare = open(outputDir + outputFile + '-foursquare.csv', 'a')
@@ -183,39 +201,40 @@ def twitterCrawlerSaveRun(usersSaveBuffer, outputDir, outputFile):
 	
 	while True:
 		document = usersSaveBuffer.get()
-		if type(document) == str:
-			if document == 'kill':
+		try:
+			if document['app'] == 'instagram':
+				outputInstagram.write(str(document) + '\n')
+			elif document['app'] == 'foursquare':
+				outputFoursquare.write(str(document) + '\n')
+			else:
+				outputGeneral.write(str(document) + '\n')
+		except TypeError:
+			if type(document) == list:
+				userid, code = document
+				outputDefinedUsers.write(userid + ',' + code + '\n')
+				logfile.write('Thread Save: saving on ' + str(userid) + ' ' + datetime.now().strftime('%m-%d %H:%M:%S') + '\n')
+			elif document == 'kill':
 				usersSaveBuffer.task_done()
+				logfile.write('Thread Save: finishing on ' + datetime.now().strftime('%m-%d %H:%M:%S') + '\n')
 				break
 			else:
-				command, userid = document.split(':')
-				if command == 'fatal-error':
-					usersSaveBuffer.task_done()
-					outputDefinedUsers.write(userid + '\n') # <<<<------ 
-				continue
-		elif document['app'] == 'instagram':
-			outputInstagram.write(str(document) + '\n')
-		elif document['app'] == 'foursquare':
-			outputFoursquare.write(str(document) + '\n')
-		else:
-			outputGeneral.write(str(document) + '\n')
-		if document['userid'] not in setDefinedUsers:
-			setDefinedUsers.add(document['userid'])
-			outputDefinedUsers.write(document['userid'] + '\n')
+				logfile.write('Thread save: review queue -> ' + str(document) + '\n')
 		usersSaveBuffer.task_done()
 
 	outputGeneral.close()
 	outputInstagram.close()
 	outputFoursquare.close()
 	outputDefinedUsers.close()
-	print 'Finishing save thread'
+
+	logfile.close()
+	print colorama.Fore.RED + 'Finishing save thread' + colorama.Fore.RESET
 
 def main():
 	outputDir = 'outputfiles/'
 	inputFile = sys.argv[1]
 	outputFile = inputFile.replace('.csv', '')
 	
-	threadBufferSize = 44
+	threadBufferSize = 43
 	setDefinedUsers = loadDefinedUsers(outputDir, outputFile)
 
 	inputUsers = open(inputFile,'r')
@@ -242,8 +261,9 @@ def main():
 
 	for i in range(threadBufferSize):
 		usersBuffer.put('kill')
-
 	usersBuffer.join()		
+	
+	usersSaveBuffer.put('kill')
 	usersSaveBuffer.join()		
 
 def test():
