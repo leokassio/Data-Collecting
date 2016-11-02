@@ -8,10 +8,12 @@
 # ============================================================================================
 
 import sys
+import time
 import httplib
 import colorama 
 import selenium
 import datetime
+import urllib2
 from tqdm import tqdm
 from threading import Thread
 from Queue import Queue
@@ -21,10 +23,8 @@ from selenium.webdriver import PhantomJS
 reload(sys)  
 sys.setdefaultencoding('utf8')
 
-threadBufferSize = 20
+threadBufferSize = 10
 urlBufferSize = 100
-outputFilename = '-instagram-output.csv'
-input_file_path = '-instagram-checkin.csv'
 
 def createDriver():
 	try:
@@ -33,17 +33,18 @@ def createDriver():
 		driver = PhantomJS()
 	return driver 
 
-
 def resolveCheckin(driver, id_data, url):
 	try:
-		driver.get(url)
+		# print 'resolving', url
+		driver.get(url) 
 		placetag = driver.find_element_by_class_name('_kul9p')
 		placeurl = placetag.get_attribute('href').encode('utf-8')
 		placename = placetag.get_attribute('title').encode('utf-8')
 
 		usernametag = driver.find_element_by_class_name('_4zhc5')
 		username = usernametag.get_attribute('title').encode('utf-8')
-		return id_data + ',' + url + ',' + placeurl + ',' + placename + ',' +  username
+		data = id_data + ',' + url + ',' + placeurl + ',' + placename + ',' +  username
+		return data
 	except selenium.common.exceptions.NoSuchElementException:
 		try:
 			error = driver.find_element_by_class_name('error-container')
@@ -54,25 +55,34 @@ def resolveCheckin(driver, id_data, url):
 		pass
 	except httplib.BadStatusLine:
 		pass
+	except urllib2.URLError, e:
+		print url, '- url open error'
+		time.sleep(1)
+	except Exception, e:
+		print 'generic exception', str(e)
 	return None # id_data + ',' + url + ',' + 'None'
 
 def resolveCheckinRun(driver, urlBuffer, saveBuffer):
 	while True:
-		item = urlBuffer.get()
-		id_data, url = item
-		line = resolveCheckin(driver, id_data, url)
-		if line != None:
-			saveBuffer.put_nowait(line)
-		urlBuffer.task_done()
+		try:
+			item = urlBuffer.get(timeout=30)
+			id_data, url = item
+			line = resolveCheckin(driver, id_data, url)
+			if line != None:
+				saveBuffer.put_nowait(line)
+			urlBuffer.task_done()
+		except Queue.Empty:
+			break
+	print 'Finishing thread...'
+	driver.quit()
 
 def saveCheckinRun(outputFilename, saveBuffer):
-		f = open(outputFilename, 'a', 0)
-		while True:
-			r = saveBuffer.get()
-			f.write(r + '\n')
-			saveBuffer.task_done()
-		f.close()
-
+	f = open(outputFilename, 'a', 0)
+	while True:
+		r = saveBuffer.get()
+		f.write(r + '\n')
+		saveBuffer.task_done()
+	f.close()
 
 def loadDefinedPlaces(outputFilename):
 	setUrlDefined = set()
@@ -89,18 +99,23 @@ def loadDefinedPlaces(outputFilename):
 def define_url():
 	global bufferSize
 	global threadBufferSize
-	global outputFilename
-	global input_file_path
 
-	cityName = sys.argv[1]
-	outputFilename = cityName + outputFilename
-	input_file_path = cityName + input_file_path
+	input_file_path = sys.argv[1]
+	outputFilename = 'output/' + input_file_path.replace('.csv', '-output.csv')
 	
-	urlBuffer = Queue(maxsize=urlBufferSize) 	
-	saveBuffer = Queue()
-
 	setUrlDefined = loadDefinedPlaces(outputFilename)
 	print colorama.Back.RED+colorama.Fore.YELLOW+str(len(setUrlDefined))+' URLs already defined! Lets Rock more now...'+colorama.Back.RESET+colorama.Fore.RESET
+	
+	try:
+		input_file = open(input_file_path, 'r')						# file with url checkins  to be resolved
+		numLines = sum(1 for line in input_file)		# counting lines on file
+		input_file.seek(0) 								# restarting the cursor of file
+	except IOError:
+		print colorama.Fore.RED+colorama.Back.WHITE+'   NO PLACE DATASET (⊙_☉) IMPOSSIBLE TO PROCEED...  '+colorama.Fore.RESET+colorama.Back.RESET
+		exit()
+
+	urlBuffer = Queue(maxsize=urlBufferSize) 	
+	saveBuffer = Queue()
 	
 	t = Thread(target=saveCheckinRun, args=[outputFilename, saveBuffer])
 	t.daemon = True
@@ -111,30 +126,20 @@ def define_url():
 		t.daemon = True
 		t.start()
 
-	try:
-		input_file = open(input_file_path, 'r')						# file with url checkins  to be resolved
-	except IOError:
-		print colorama.Fore.RED+colorama.Back.WHITE+'   NO PLACE DATASET (⊙_☉) IMPOSSIBLE TO PROCEED...  '+colorama.Fore.RESET+colorama.Back.RESET
-
-	numLines = sum(1 for line in input_file)		# counting lines on file
-	input_file.seek(0) 								# restarting the cursor of file
-
-	for line in tqdm(input_file, desc='Defining URLs ' + cityName, total=numLines, leave=True):
+	for line in tqdm(input_file, desc='Defining URLs', total=numLines, leave=True, dynamic_ncols=True):
 		linesplited = line.replace('\n', '').split(',')
 		try:
 			id_data = linesplited[0].encode('utf-8')
+			if id_data in setUrlDefined:
+				continue
 			url = linesplited[1].encode('utf-8')
 			if 'http://' not in url and 'https://' not in url:
 				url = 'http://' + url
 		except IndexError:
 			continue
-
-		if id_data in setUrlDefined:
-			continue
-
 		urlBuffer.put((id_data, url))
-
 	urlBuffer.join()
+	saveBuffer.join()
 	print colorama.Fore.GREEN, 'GG bro ;)', colorama.Fore.RESET
 
 def main():
