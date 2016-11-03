@@ -108,7 +108,6 @@ def loadDefinedPlaces(outputFilename):
 	return setUrlDefined
 
 def define_url():
-	print 'Instagram HTML/JavaScript Parser v1.1'
 	urlBufferSize = 1000
 	args = sys.argv[1:]
 	input_file_path = args[0]
@@ -182,8 +181,17 @@ def define_url():
 	saveBuffer.join()
 	print colorama.Fore.GREEN, 'GG bro ;)', colorama.Fore.RESET
 
+def printHeader():
+	print '▀█▀ █▀▀▄ █▀▀ ▀▀█▀▀ █▀▀█ █▀▀▀ █▀▀█ █▀▀█ █▀▄▀█ '
+	print '▒█░ █░░█ ▀▀█ ░░█░░ █▄▄█ █░▀█ █▄▄▀ █▄▄█ █░▀░█ '
+	print '▄█▄ ▀░░▀ ▀▀▀ ░░▀░░ ▀░░▀ ▀▀▀▀ ▀░▀▀ ▀░░▀ ▀░░░▀ '
+	print ''
+	print '█▀▀ █▀▀█ █▀▀█ █░░░█ █░░ █▀▀ █▀▀█ '
+	print '█░░ █▄▄▀ █▄▄█ █▄█▄█ █░░ █▀▀ █▄▄▀ '
+	print '▀▀▀ ▀░▀▀ ▀░░▀ ░▀░▀░ ▀▀▀ ▀▀▀ ▀░▀▀ '
+
 def main():
-	print 'Small and tiny script to define the Instagram Venue/Place of Check-ins'
+	printHeader()
 	define_url()
 
 if __name__ == "__main__":
