@@ -119,9 +119,9 @@ def define_url():
 		threadBufferSize = 10
 	try:
 		if args[2] == 'restart':
-
+			restartFlag = True
 	except IndexError:
-		pass
+		restartFlag = False
 
 	outputFilename = 'output/' + input_file_path.replace('.csv', '-output.csv')
 
@@ -136,6 +136,23 @@ def define_url():
 		print colorama.Fore.RED+colorama.Back.WHITE+'   NO PLACE DATASET (⊙_☉) IMPOSSIBLE TO PROCEED...  '+colorama.Fore.RESET+colorama.Back.RESET
 		exit()
 
+	initialLine = 0
+	if restartFlag: # quickly restart - initialize the form the line of last sample registered
+		collectedSamples = set(setUrlDefined)
+		for line in tqdm(input_file, desc='Restarting Collector', total=numLines, leave=True, dynamic_ncols=True):
+			initialLine += 1
+			linesplited = line.replace('\n', '').split(',')
+			try:
+				id_data = linesplited[0].encode('utf-8')
+				if len(collectedSamples) > 0:
+					collectedSamples.remove(id_data)
+				else:
+					break
+			except IndexError:
+				continue
+			except KeyError:
+				continue
+
 	urlBuffer = Queue.Queue(maxsize=urlBufferSize)
 	saveBuffer = Queue.Queue()
 
@@ -148,7 +165,7 @@ def define_url():
 		t.daemon = True
 		t.start()
 
-	for line in tqdm(input_file, desc='Defining URLs', total=numLines, leave=True, dynamic_ncols=True):
+	for line in tqdm(input_file, desc='Defining URLs', total=numLines, initial=initialLine, leave=True, dynamic_ncols=True):
 		linesplited = line.replace('\n', '').split(',')
 		try:
 			id_data = linesplited[0].encode('utf-8')
