@@ -1,6 +1,6 @@
-# -*- coding: utf-8 -*- 
+# -*- coding: utf-8 -*-
 # ============================================================================================
-# Kassio Machado - GNU License - 2016-02-12 
+# Kassio Machado - GNU License - 2016-02-12
 # PhD candidate on Science Computing - UFMG/Brazil
 # Crawler to visit Instagram urls and get venues registered on dataset of check-ins
 # the data if provided in an CSV file and exported in other CSV file.
@@ -10,17 +10,17 @@
 import sys
 import time
 import httplib
-import colorama 
+import colorama
 import selenium
 import datetime
 import urllib2
 from tqdm import tqdm
 from threading import Thread
-from Queue import Queue
+import Queue
 from selenium.webdriver import Firefox
 from selenium.webdriver import PhantomJS
 
-reload(sys)  
+reload(sys)
 sys.setdefaultencoding('utf8')
 
 def createDriver():
@@ -28,12 +28,12 @@ def createDriver():
 		driver = PhantomJS('./phantomjs')
 	except:
 		driver = PhantomJS()
-	return driver 
+	return driver
 
-def resolveCheckin(driver, id_data, url):
+def resolveCheckin(driver, id_data, url, idThread):
 	try:
 		# print 'resolving', url
-		driver.get(url) 
+		driver.get(url)
 		placetag = driver.find_element_by_class_name('_kul9p')
 		placeurl = placetag.get_attribute('href').encode('utf-8')
 		placename = placetag.get_attribute('title').encode('utf-8')
@@ -53,32 +53,46 @@ def resolveCheckin(driver, id_data, url):
 	except httplib.BadStatusLine:
 		pass
 	except urllib2.URLError, e:
-		print url, '- url open error'
-		time.sleep(1)
+		print url, '- url open error', str(e), '#' + str(idThread)
 	except Exception, e:
 		print 'generic exception', str(e)
 	return None # id_data + ',' + url + ',' + 'None'
 
-def resolveCheckinRun(driver, urlBuffer, saveBuffer):
+def resolveCheckinRun(driver, urlBuffer, saveBuffer, idThread):
+	invalidStreak = 0
 	while True:
 		try:
 			item = urlBuffer.get(timeout=30)
 			id_data, url = item
-			line = resolveCheckin(driver, id_data, url)
+			line = resolveCheckin(driver, id_data, url, idThread)
 			if line != None:
 				saveBuffer.put_nowait(line)
+				invalidStreak = 0
+			else:
+				invalidStreak += 1
 			urlBuffer.task_done()
+			if invalidStreak >= 100:
+				print 'Invalid Streak on Crawler-Thread', idThread, '(1min)'
+				time.sleep(60)
 		except Queue.Empty:
 			break
-	print 'Finishing thread...'
 	driver.quit()
+	print 'Finishing Crawler-Thread', idThread, '...'
+	return
 
 def saveCheckinRun(outputFilename, saveBuffer):
 	f = open(outputFilename, 'a', 0)
 	while True:
-		r = saveBuffer.get()
-		f.write(r + '\n')
-		saveBuffer.task_done()
+		try:
+			r = saveBuffer.get(timeout=120)
+			if r == 'finish':
+				saveBuffer.task_done()
+				break
+			f.write(r + '\n')
+			saveBuffer.task_done()
+		except Queue.Empty:
+			print 'Save-Thread Timeout!'
+	print 'Finishing Save-Thread...'
 	f.close()
 
 def loadDefinedPlaces(outputFilename):
@@ -94,6 +108,7 @@ def loadDefinedPlaces(outputFilename):
 	return setUrlDefined
 
 def define_url():
+	print 'Instagram HTML/JavaScript Parser v1.1'
 	urlBufferSize = 1000
 	args = sys.argv[1:]
 	input_file_path = args[0]
@@ -102,12 +117,17 @@ def define_url():
 	except:
 		print colorama.Fore.RED, 'Default Thread Pool Size: 10', colorama.Fore.RESET
 		threadBufferSize = 10
-	
+	try:
+		if args[2] == 'restart':
+
+	except IndexError:
+		pass
+
 	outputFilename = 'output/' + input_file_path.replace('.csv', '-output.csv')
-	
+
 	setUrlDefined = loadDefinedPlaces(outputFilename)
 	print colorama.Back.RED+colorama.Fore.YELLOW+str(len(setUrlDefined))+' URLs already defined! Lets Rock more now...'+colorama.Back.RESET+colorama.Fore.RESET
-	
+
 	try:
 		input_file = open(input_file_path, 'r')						# file with url checkins  to be resolved
 		numLines = sum(1 for line in input_file)		# counting lines on file
@@ -116,15 +136,15 @@ def define_url():
 		print colorama.Fore.RED+colorama.Back.WHITE+'   NO PLACE DATASET (⊙_☉) IMPOSSIBLE TO PROCEED...  '+colorama.Fore.RESET+colorama.Back.RESET
 		exit()
 
-	urlBuffer = Queue(maxsize=urlBufferSize) 	
-	saveBuffer = Queue()
-	
+	urlBuffer = Queue.Queue(maxsize=urlBufferSize)
+	saveBuffer = Queue.Queue()
+
 	t = Thread(target=saveCheckinRun, args=[outputFilename, saveBuffer])
 	t.daemon = True
 	t.start()
 	for i in range(threadBufferSize):
 		driver = createDriver() # in case of PhantomJS not available, we can use Firefox()
-		t = Thread(target=resolveCheckinRun, args=[driver, urlBuffer, saveBuffer])
+		t = Thread(target=resolveCheckinRun, args=[driver, urlBuffer, saveBuffer, i])
 		t.daemon = True
 		t.start()
 
@@ -141,6 +161,7 @@ def define_url():
 			continue
 		urlBuffer.put((id_data, url))
 	urlBuffer.join()
+	saveBuffer.put('finish')
 	saveBuffer.join()
 	print colorama.Fore.GREEN, 'GG bro ;)', colorama.Fore.RESET
 
@@ -150,7 +171,3 @@ def main():
 
 if __name__ == "__main__":
 	main()
-
-
-
-
