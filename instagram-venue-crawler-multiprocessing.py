@@ -9,6 +9,7 @@
 
 import sys
 import time
+import random
 import httplib
 import colorama
 import selenium
@@ -58,7 +59,8 @@ def resolveCheckin(driver, id_data, url, idThread):
 		print 'generic exception', str(e)
 	return None # id_data + ',' + url + ',' + 'None'
 
-def resolveCheckinRun(driver, urlBuffer, saveBuffer, idThread):
+def resolveCheckinRun(urlBuffer, saveBuffer, idThread):
+	driver = createDriver() # in case of PhantomJS not available, we can use Firefox()
 	invalidStreak = 0
 	while True:
 		try:
@@ -71,9 +73,13 @@ def resolveCheckinRun(driver, urlBuffer, saveBuffer, idThread):
 			else:
 				invalidStreak += 1
 			urlBuffer.task_done()
+			time.sleep(random.random())
 			if invalidStreak >= 100:
 				print 'Invalid Streak on Crawler-Thread', idThread, '(1min)'
+				driver.quit()
+				invalidStreak = 0
 				time.sleep(60)
+				driver = createDriver() # in case of PhantomJS not available, we can use Firefox()
 		except Queue.Empty:
 			break
 	driver.quit()
@@ -159,8 +165,7 @@ def define_url():
 	t.daemon = True
 	t.start()
 	for i in range(threadBufferSize):
-		driver = createDriver() # in case of PhantomJS not available, we can use Firefox()
-		t = Thread(target=resolveCheckinRun, args=[driver, urlBuffer, saveBuffer, i])
+		t = Thread(target=resolveCheckinRun, args=[urlBuffer, saveBuffer, i])
 		t.daemon = True
 		t.start()
 
